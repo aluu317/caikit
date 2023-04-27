@@ -37,6 +37,14 @@ multi_lib_cleaned_list = ["caikit_libraryfoo", "caikit_librarybar", "foo_bar"]
 
 ## Tests ########################################################################
 
+### add_library #################################################################
+def test_adding_duplicate_libraries_to_cdm():
+    cdm = UnifiedDataModel()
+    cdm.add_library("foo_bar", None)
+    with pytest.raises(ValueError) as e:
+        cdm.add_library("foo_bar", None)
+    assert "Double registration of foo_bar" in str(e.value)
+    
 
 ### clean_lib_names #############################################################
 def test_multi_lib_name_cleaning():

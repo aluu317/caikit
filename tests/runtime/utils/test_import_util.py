@@ -14,8 +14,10 @@
 
 # Standard
 from types import SimpleNamespace
+from unittest.mock import patch
 import inspect
 import sys
+import types
 
 # Third Party
 import pytest
@@ -44,7 +46,7 @@ def test_adding_duplicate_libraries_to_cdm():
     with pytest.raises(ValueError) as e:
         cdm.add_library("foo_bar", None)
     assert "Double registration of foo_bar" in str(e.value)
-    
+
 
 ### clean_lib_names #############################################################
 def test_multi_lib_name_cleaning():
@@ -128,6 +130,25 @@ def test_get_data_model_is_accessible():
         and issubclass(attr_val, DataBase)
     ]
     assert all(attrs_match)
+
+
+def test_data_model_includes_the_library_itself():
+    # Local
+    import sample_lib
+
+    cdm = get_data_model()
+    assert hasattr(cdm, "sample_lib") and getattr(cdm, "sample_lib") is not None
+
+
+@patch("importlib.import_module")
+def test_get_data_model_on_a_null_library_raises_error(mock_import_module):
+    lib_names = ["sample_lib"]
+    mock_config = SimpleNamespace(**{"caikit_library": " ".join(lib_names)})
+
+    mock_import_module.return_value = None
+    with pytest.raises(ValueError) as e:
+        get_data_model(mock_config)
+    assert "Unable to load data model from library: sample_lib" in str(e)
 
 
 def test_multiple_caikit_libraries():

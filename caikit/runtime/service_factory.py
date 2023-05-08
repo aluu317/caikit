@@ -36,8 +36,6 @@ import alog
 
 # Local
 from caikit import get_config
-from caikit.core import dataobject
-from caikit.core.data_model.base import DataBase
 from caikit.core.module import ModuleBase
 from caikit.interfaces.runtime.data_model import (
     TrainingInfoRequest,
@@ -216,9 +214,11 @@ class ServicePackageFactory:
                 rpc for rpc in task_rpc_list if rpc.return_type is not None
             ]
 
-            request_data_models = cls._create_request_message_types(
-                task_rpc_list, package_name
-            )
+            request_data_models = []
+            for task in task_rpc_list:
+                request_data_models.append(
+                    task.create_request_message_type(package_name)
+                )
 
             client_module = ModuleType(
                 "ClientMessages",
@@ -313,45 +313,6 @@ class ServicePackageFactory:
             excluded_modules,
         )
         return clean_modules
-
-    @staticmethod
-    def _create_request_message_types(
-        rpcs_list: List[RPCSerializerBase],
-        package_name: str,
-    ) -> List[Type[DataBase]]:
-        """Dynamically create data model classes for the inputs to these RPCs"""
-        data_model_classes = []
-        for task in rpcs_list:
-            properties = {
-                # triple e.g. ('caikit.interfaces.common.ProducerPriority', 'producer_id', 1)
-                # This does not take care of nested descriptors
-                triple[1]: triple[0]
-                for triple in task.request.triples
-                if triple[1] not in task.request.default_set
-            }
-            optional_properties = {
-                triple[1]: triple[0]
-                for triple in task.request.triples
-                if triple[1] in task.request.default_set
-            }
-            schema = {
-                "properties": properties,
-                "optionalProperties": optional_properties,
-            }
-
-            if not schema:
-                # hacky hack hack: make sure we actually have a schema to generate
-                continue
-
-            decorator = dataobject(
-                schema=schema,
-                package=package_name,
-            )
-            cls_ = type(task.request.name, (object,), {})
-            decorated_cls = decorator(cls_)
-            data_model_classes.append(decorated_cls)
-
-        return data_model_classes
 
     @staticmethod
     def _create_service_json(

@@ -30,6 +30,8 @@ from .signature_parsing.module_signature import (
     CaikitCoreModuleMethodSignature,
     CustomSignature,
 )
+from caikit.core import dataobject
+from caikit.core.data_model.base import DataBase
 from caikit.core.module import ModuleBase
 from caikit.interfaces.runtime.data_model import ModelPointer, TrainingJob
 from caikit.runtime.service_generation.data_stream_source import make_data_stream_source
@@ -49,6 +51,37 @@ class RPCSerializerBase(abc.ABC):
     @abc.abstractmethod
     def request(self) -> "_RequestMessage":
         """Return the internal representation of the request message type for this RPC"""
+
+    def create_request_message_type(self, package_name: str) -> Type[DataBase]:
+        """Dynamically create data model for this class's input RPC"""
+        properties = {
+            # triple e.g. ('caikit.interfaces.common.ProducerPriority', 'producer_id', 1)
+            # This does not take care of nested descriptors
+            triple[1]: triple[0]
+            for triple in self.request.triples
+            if triple[1] not in self.request.default_set
+        }
+        optional_properties = {
+            triple[1]: triple[0]
+            for triple in self.request.triples
+            if triple[1] in self.request.default_set
+        }
+        schema = {
+            "properties": properties,
+            "optionalProperties": optional_properties,
+        }
+
+        if not schema:
+            # hacky hack hack: make sure we actually have a schema to generate
+            return None
+
+        decorator = dataobject(
+            schema=schema,
+            package=package_name,
+        )
+        cls_ = type(self.request.name, (object,), {})
+        decorated_cls = decorator(cls_)
+        return decorated_cls
 
 
 class ModuleClassTrainRPC(RPCSerializerBase):

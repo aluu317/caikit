@@ -212,8 +212,8 @@ class ServicePackageFactory:
             ]
 
             request_data_models = []
-            for task in task_rpc_list:
-                request_data_models.append(task.create_request_data_model(package_name))
+            for rpc in task_rpc_list:
+                request_data_models.append(rpc.create_request_data_model(package_name))
 
             client_module = ModuleType(
                 "ClientMessages",
@@ -225,8 +225,8 @@ class ServicePackageFactory:
                 setattr(client_module, dm_class.__name__, type(dm_class().to_proto()))
 
             rpc_jsons = []
-            for task in task_rpc_list:
-                rpc_jsons.append(task.create_rpc_json(package_name))
+            for rpc in task_rpc_list:
+                rpc_jsons.append(rpc.create_rpc_json(package_name))
             service_json = {"service": {"rpcs": rpc_jsons}}
             service_descriptor = json_to_service(
                 name=service_name, package=package_name, json_service_def=service_json

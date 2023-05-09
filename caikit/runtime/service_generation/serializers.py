@@ -17,7 +17,7 @@ This package has classes that will serialize a python interface to a protocol bu
 Typically used for `caikit.core.module`s that expose .train and .run functions.
 """
 # Standard
-from typing import Dict, List, Optional, Set, Tuple, Type, get_args
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, get_args
 import abc
 
 # First Party
@@ -52,7 +52,7 @@ class RPCSerializerBase(abc.ABC):
     def request(self) -> "_RequestMessage":
         """Return the internal representation of the request message type for this RPC"""
 
-    def create_request_message_type(self, package_name: str) -> Type[DataBase]:
+    def create_request_data_model(self, package_name: str) -> Type[DataBase]:
         """Dynamically create data model for this class's input RPC"""
         properties = {
             # triple e.g. ('caikit.interfaces.common.ProducerPriority', 'producer_id', 1)
@@ -82,6 +82,16 @@ class RPCSerializerBase(abc.ABC):
         cls_ = type(self.request.name, (object,), {})
         decorated_cls = decorator(cls_)
         return decorated_cls
+
+    def create_rpc_json(self, package_name: str) -> dict[str, Any]:
+        output_type_name = self.return_type.get_proto_class().DESCRIPTOR.full_name
+
+        rpc_json = {
+            "name": f"{self.name}",
+            "input_type": f"{package_name}.{self.request.name}",
+            "output_type": output_type_name,
+        }
+        return rpc_json
 
 
 class ModuleClassTrainRPC(RPCSerializerBase):

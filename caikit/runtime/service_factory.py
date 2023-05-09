@@ -202,11 +202,6 @@ class ServicePackageFactory:
                 task_rpc_list = service_generation.create_training_rpcs(clean_modules)
                 service_name = f"{ai_domain_name}TrainingService"
 
-            for rpc in task_rpc_list:
-                if rpc.return_type is None:
-                    # TODO: need to hook up the excluded tasks / modules configs and add some
-                    # more handling here to ensure good RPCs generated
-                    log.info("Skipping rpc %s, no return type on method!", rpc.name)
             task_rpc_list = [
                 rpc for rpc in task_rpc_list if rpc.return_type is not None
             ]

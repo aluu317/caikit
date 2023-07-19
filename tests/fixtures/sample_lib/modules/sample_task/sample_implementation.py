@@ -146,6 +146,6 @@ class SampleModule(caikit.core.ModuleBase):
         # Barf if we were incorrectly passed data not in datastream format
         assert isinstance(training_data, DataStream)
         if union_list:
-            assert isinstance(union_list.values, List)
-            assert len(union_list.values) > 0
+            assert isinstance(union_list, List)
+            assert len(union_list) > 0
         return cls(batch_size=batch_size)

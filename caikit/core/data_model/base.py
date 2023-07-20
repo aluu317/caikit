@@ -452,6 +452,7 @@ class DataBase(metaclass=_DataBaseMetaClass):
 
     # TODO: make this not hard-coded
     _UNION_TYPES = ["IntSequence", "FloatSequence", "StrSequence", "BoolSequence"]
+    _UNION_FIELD_NAMES = ["_int_sequence", "_float_sequence", "_str_sequence", "_bool_sequence"]
 
     @dataclass
     class OneofFieldVal:
@@ -557,6 +558,7 @@ class DataBase(metaclass=_DataBaseMetaClass):
         #   bool < int < float
         for field_name in cls._fields_oneofs_map.get(oneof_name, []):
             if cls._is_valid_type_for_field(field_name, oneof_val):
+                print("in _infer_which_oneof, returning ", field_name)
                 return field_name
 
     def _get_which_oneof_dict(self) -> Dict[str, str]:
@@ -570,7 +572,7 @@ class DataBase(metaclass=_DataBaseMetaClass):
     def _is_valid_type_for_field(cls, field_name: str, val: Any) -> bool:
         """Check whether the given value is valid for the given field"""
         field_descriptor = cls._proto_class.DESCRIPTOR.fields_by_name[field_name]
-
+        print("in _is_valid_type_for_field, field_name is ", field_name, " and val is: ", val)
         if val is None:
             return False
 
@@ -584,6 +586,15 @@ class DataBase(metaclass=_DataBaseMetaClass):
             and field_descriptor.enum_type == val.get_proto_class().DESCRIPTOR
         ):
             return True
+        
+        if isinstance(val, list):
+            if len(val) == 0:
+                log.error("Cannot check union list type since list is empty, assuming empty list fits the type")
+                return True
+            else:
+                list_type = type(val[0]).__name__
+                print("in _is_valid_type_for_field, checking if ", f"{list_type}_sequence", " is in ", field_name)
+                return f"{list_type}_sequence" in field_name
 
         # If it's a data object or an enum and the descriptors don't match, it's
         # a bad type
@@ -736,6 +747,30 @@ class DataBase(metaclass=_DataBaseMetaClass):
         """
         # Get protobufs class required for parsing
         error.type_check("<COR91037250E>", str, dict, json_str=json_str)
+        print("in from_json, json str is: ", json_str)
+        
+        proto = cls.get_proto_class()
+        print("in from_json, the json_str before massaging is: ", json_str)
+        print("in from_json, _fields_oneofs_map is: ", cls._fields_oneofs_map)
+        if cls._fields_oneofs_map:
+            json_dict = json.loads(json_str)
+            for one_of, union_list_types in cls._fields_oneofs_map.items():
+                list_value = json_dict[one_of]
+                print("in from_json, list_value is: ", list_value)
+                if len(list_value) == 0:
+                    log.error("Cannot defer union list type since list is empty")
+                    return
+                else:
+                    list_type = type(list_value[0]).__name__
+                    union_type = f"{one_of}_{list_type}_sequence"
+                    print("in from_json, union_type is: ", union_type)
+                    if union_type in union_list_types:
+                        json_dict[union_type] = {"values": list_value}
+                        del json_dict[one_of]
+            json_str = json.dumps(json_dict)
+
+            print("in from_json, the json_dict after massaging is: ", json_dict)
+
         if isinstance(json_str, dict):
             # Convert dict object to a JSON string
             json_str = json.dumps(json_str)
@@ -743,9 +778,9 @@ class DataBase(metaclass=_DataBaseMetaClass):
         try:
             # Parse given JSON into google.protobufs.pyext.cpp_message.GeneratedProtocolMessageType
             parsed_proto = json_format.Parse(
-                json_str, cls.get_proto_class()(), ignore_unknown_fields=False
+                json_str, proto(), ignore_unknown_fields=False
             )
-
+            print("in from_json, parsed_proto is: ", parsed_proto)
             # Use from_proto to return the DataBase object from the parsed proto
             return cls.from_proto(parsed_proto)
 
@@ -783,9 +818,11 @@ class DataBase(metaclass=_DataBaseMetaClass):
             The protobufs is filled in place, so the argument and the return
             value are the same at the end of this call.
         """
-        # Fill proto for the oneofs. Example: given union_list, fill in union_list_str_sequence
+        # Fill proto for the oneofs. 
+        # Example: given union_list on this class, fill in union_list_str_sequence field in proto
         if self._fields_oneofs_map:
             for one_of, union_fields in self._fields_oneofs_map.items():
+                print("in fill_proto, one_of is: ", one_of)
                 attr = getattr(self, one_of)
                 if attr is None:
                     continue
@@ -797,6 +834,7 @@ class DataBase(metaclass=_DataBaseMetaClass):
                         # FloatSequence, and not a primitive
                         if u_field in self._fields_message:
                             subproto = getattr(proto, u_field)
+                            print("in fill_proto, subproto is: ", subproto.DESCRIPTOR.full_name)
                             if any(
                                 subproto.DESCRIPTOR.full_name.endswith(u_type)
                                 for u_type in self._UNION_TYPES
@@ -805,8 +843,10 @@ class DataBase(metaclass=_DataBaseMetaClass):
                                 try:
                                     subproto.CopyFrom(seq_dm(values=attr))
                                     log.debug4("Successfully fill proto for", u_field)
+                                    print("Successfully fill proto for", u_field)
                                 except TypeError:
                                     log.debug4("not the correct union list type")
+                                    print("not the correct union list type")
 
         for field in self.fields:
             try:
@@ -918,7 +958,19 @@ class DataBase(metaclass=_DataBaseMetaClass):
 
         if "default" not in kwargs:
             kwargs["default"] = _default_serialization_overrides
-        return json.dumps(self.to_dict(), **kwargs)
+        
+        dict_val = self.to_dict()
+        print("in to_json, to_dict before massaging is: ", dict_val)
+        if self._fields_to_oneof:
+            for field, one_of in self._fields_to_oneof.items():
+                if any (field.endswith(u_field) for u_field in self._UNION_FIELD_NAMES):
+                    # this is a union of list
+                    if field in dict_val:
+                        dict_val[one_of] = dict_val[field]
+                        del dict_val[field]
+        print("in to_json, to_dict after massaging is: ", dict_val)
+        print("in to_json, returning ", json.dumps(dict_val, **kwargs))
+        return json.dumps(dict_val, **kwargs)
 
     def __repr__(self):
         """Human-friendly representation."""

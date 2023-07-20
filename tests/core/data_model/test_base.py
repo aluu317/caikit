@@ -243,6 +243,38 @@ def test_compiled_proto_oneof():
         with pytest.raises(TypeError):
             dm.ThingOne(foo=1, fooster="asdf")
 
+def test_compiled_proto_oneof_union_list():
+    """Make sure that support for 'compiled' protos works for Union of lists
+    """
+    # pylint: disable=duplicate-code
+    with temp_data_model(
+        make_proto_def(
+            {
+                "ThingOne": {
+                    "foo": "Union[List[str], List[int]]",
+                }
+            },
+            mock_compiled=True,
+        )
+    ) as dm:
+        assert isinstance(dm.ThingOne, type)
+        assert issubclass(dm.ThingOne, DataBase)
+        assert not issubclass(dm.ThingOne, DataObjectBase)
+        assert set(dm.ThingOne.fields) == {"foo_int_sequence", "foo_str_sequence"}
+
+        # Construct with the oneof name
+        inst = dm.ThingOne(foo=["hello", "world"])
+        assert inst.foo == ["hello", "world"]
+        assert inst.which_oneof("foo") == "foo_str_sequence"
+
+        # Construct with field name
+        inst = dm.ThingOne(foo_int_sequence=[1,2,3])
+        assert inst.foo == [1,2,3]
+        assert inst.which_oneof("foo") == "foo_int_sequence"
+
+        # Conflicting args
+        with pytest.raises(TypeError):
+            dm.ThingOne(foo=["hi"], foo_str_sequence=["asdf"])
 
 ##################
 ## Data Backend ##
@@ -528,6 +560,32 @@ def test_nonprimitive_maps_are_serializable():
         assert isinstance(recon_msg, dm.MapParty)
         assert recon_msg.mobject["foo"].foo == 100
 
+# def test_union_of_lists_are_serializable():
+#     """Ensure that we correctly handle union of list values for de/serialization."""
+#     with temp_data_model(
+#         make_proto_def(
+#             {
+#                 "ComplexType": {
+#                     "foo": "Union[List[str], List[bool]]",
+#                 },
+#             }
+#         )
+#     ) as dm:
+#         msg = dm.ComplexType(foo=["hello", "world"])
+#         # Make sure we can proto and back
+#         print("in testing, msg is: ", msg)
+#         print("in testing, msg.to_proto is: ", msg.to_proto())
+        # recon_msg = dm.ComplexType.from_proto(msg.to_proto())
+        # print("in testing, recon_msf of proto is: ", recon_msg)
+        # assert isinstance(recon_msg, dm.ComplexType)
+        # assert recon_msg.foo == ["hello", "world"]
+        # Make sure we can json and back
+        # print("\nin testing, msg.to_json is: ", msg.to_json())
+        # recon_msg = dm.ComplexType.from_json(msg.to_json())
+        # print("in testing, recon_msf of json is: ", recon_msg)
+        # assert isinstance(recon_msg, dm.ComplexType)
+        # print("in testing, to_dict is: ", recon_msg.to_dict())
+        # assert recon_msg.foo == ["hello", "world"]
 
 ###############
 ## From Data ##
